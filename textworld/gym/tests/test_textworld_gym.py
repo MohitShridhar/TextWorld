@@ -13,11 +13,11 @@ def test_register_game():
         options = textworld.GameOptions()
         options.path = tmpdir
         options.seeds = 1234
-        gamefile, game = textworld.make(options)
+        game_file, game = textworld.make(options)
         env_options = EnvInfos(inventory=True, description=True,
                                admissible_commands=True)
 
-        env_id = textworld.gym.register_game(gamefile, env_options, name="test-single")
+        env_id = textworld.gym.register_game(game_file, env_options, name="test-single")
         env = gym.make(env_id)
         obs, infos = env.reset()
         assert len(infos) == len(env_options)
@@ -35,11 +35,11 @@ def test_register_zmachine_game():
         options.path = tmpdir
         options.seeds = 1234
         options.file_ext = ".z8"
-        gamefile, game = textworld.make(options)
-        os.remove(gamefile.replace(".z8", ".json"))  # Simulate an existing Z-Machine game.
+        game_file, game = textworld.make(options)
+        os.remove(game_file.replace(".z8", ".json"))  # Simulate an existing Z-Machine game.
         env_options = EnvInfos()
 
-        env_id = textworld.gym.register_game(gamefile, env_options, name="test-zmachine")
+        env_id = textworld.gym.register_game(game_file, env_options, name="test-zmachine")
         env = gym.make(env_id)
         obs, infos = env.reset()
         assert len(infos) == len(env_options)
@@ -56,13 +56,13 @@ def test_register_games():
         options = textworld.GameOptions()
         options.path = tmpdir
         options.seeds = 1234
-        gamefile1, game1 = textworld.make(options)
+        game_file1, game1 = textworld.make(options)
         options.seeds = 4321
-        gamefile2, game2 = textworld.make(options)
+        game_file2, game2 = textworld.make(options)
         env_options = EnvInfos(inventory=True, description=True,
                                admissible_commands=True)
 
-        env_id = textworld.gym.register_games([gamefile1, gamefile2], env_options, name="test-multi")
+        env_id = textworld.gym.register_games([game_file1, game_file2], env_options, name="test-multi")
         env = gym.make(env_id)
         env.seed(2)  # Make game2 starts on the first reset call.
 
@@ -88,18 +88,25 @@ def test_register_games():
         assert obs1 != obs2
 
 
-def test_batch():
+def test_batch_sync():
     batch_size = 5
     with make_temp_directory() as tmpdir:
         options = textworld.GameOptions()
         options.path = tmpdir
         options.seeds = 1234
-        gamefile, game = textworld.make(options)
+        options.file_ext = ".ulx"
+        game_file1, game = textworld.make(options)
+        options.file_ext = ".z8"
+        game_file2, game = textworld.make(options)
 
         env_options = EnvInfos(inventory=True, description=True,
                                admissible_commands=True)
-        env_id = textworld.gym.register_games([gamefile], env_options, name="test-batch")
-        env_id = textworld.gym.make_batch(env_id, batch_size)
+        env_id = textworld.gym.register_games([game_file1, game_file2],
+                                              request_infos=env_options,
+                                              batch_size=batch_size,
+                                              name="test-batch",
+                                              asynchronous=False)
+
         env = gym.make(env_id)
 
         obs, infos = env.reset()
@@ -118,18 +125,24 @@ def test_batch():
         assert all(score == 1 for score in scores)
 
 
-def test_batch_parallel():
+def test_batch_async():
     batch_size = 5
     with make_temp_directory() as tmpdir:
         options = textworld.GameOptions()
         options.path = tmpdir
         options.seeds = 1234
-        gamefile, game = textworld.make(options)
+        options.file_ext = ".ulx"
+        game_file1, game = textworld.make(options)
+        options.file_ext = ".z8"
+        game_file2, game = textworld.make(options)
 
         env_options = EnvInfos(inventory=True, description=True,
                                admissible_commands=True)
-        env_id = textworld.gym.register_game(gamefile, env_options, name="test-batch-parallel")
-        env_id = textworld.gym.make_batch(env_id, batch_size, parallel=True)
+        env_id = textworld.gym.register_games([game_file1, game_file2],
+                                              request_infos=env_options,
+                                              batch_size=batch_size,
+                                              name="test-batch-parallel",
+                                              asynchronous=True)
         env = gym.make(env_id)
 
         obs, infos = env.reset()
