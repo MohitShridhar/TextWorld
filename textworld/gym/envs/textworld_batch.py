@@ -14,27 +14,27 @@ from gym.utils import colorize
 import textworld
 import textworld.text_utils
 from textworld import EnvInfos
-from textworld.envs.wrappers import Filter
+from textworld.envs.wrappers import Filter, GenericEnvironment
+from textworld.envs.batch import AsyncBatchEnv, SyncBatchEnv
 
 from textworld.gym.spaces import text_spaces
 from textworld.gym.envs.utils import shuffled_cycle
 
 
-class TextworldGamesEnv(gym.Env):
+class TextworldBatchGymEnv(gym.Env):
     metadata = {'render.modes': ['human', 'ansi', 'text']}
 
-    def __init__(self, game_files: List[str],
+    def __init__(self,
+                 gamefiles: List[str],
                  request_infos: Optional[EnvInfos] = None,
+                 batch_size: int = 1,
+                 asynchronous: bool = True,
                  action_space: Optional[gym.Space] = None,
                  observation_space: Optional[gym.Space] = None) -> None:
-        """ Environment for playing text-based games.
-
-        Each time `TextworldGamesEnv.reset()` is called, a new game from the
-        pool starts. Each game of the pool is guaranteed to be played exactly
-        once before a same game is played for a second time.
+        """ Environment for playing text-based games in batch.
 
         Arguments:
-            game_files:
+            gamefiles:
                 Paths of every game composing the pool (`*.ulx` + `*.json`, `*.z[1-8]`).
             request_infos:
                 For customizing the information returned by this environment
@@ -43,6 +43,12 @@ class TextworldGamesEnv(gym.Env):
                 for the list of available information).
 
                 .. warning:: This is only supported for `*.ulx` games generated with TextWorld.
+            batch_size:
+                Number of games in a batch. Default 1.
+            asynchronous: bool
+                If `True`, wraps the environments in an `AsyncBatchEnv` (which uses
+                `multiprocessing` to run the environments in parallel). If `False`,
+                wraps the environments in a `SyncBatchEnv`. Default: `True`.
             action_space:
                 The action space of this TextWorld environment. By default, a
                 :py:class:`textworld.gym.spaces.Word <textworld.gym.spaces.text_spaces.Word>`
@@ -54,13 +60,18 @@ class TextworldGamesEnv(gym.Env):
                 instance is used with a `max_length` of 200 and a vocabulary
                 extracted from the TextWorld game.
         """
-        self.gamefiles = game_files
+        self.gamefiles = gamefiles
+        self.batch_size = batch_size
         self.request_infos = request_infos or EnvInfos()
-        self.ob = None
-        self.last_command = None
-        self.textworld_env = None
-        self.current_gamefile = None
         self.seed(1234)
+
+        def _make_env():
+            env = GenericEnvironment(self.request_infos)
+            env = Filter(env)
+            return env
+
+        env_fns = [_make_env for _ in range(self.batch_size)]
+        self.batch_env = AsyncBatchEnv(env_fns) if self.batch_size > 1 and asynchronous else SyncBatchEnv(env_fns)
 
         if action_space is None or observation_space is None:
             # Extract vocabulary from all games.
@@ -90,26 +101,25 @@ class TextworldGamesEnv(gym.Env):
         self._gamefiles_iterator = shuffled_cycle(gamefiles, rng=rng)
         return [seed]
 
-    def reset(self) -> Tuple[str, Dict[str, Any]]:
+    def reset(self) -> Tuple[List[str], Dict[str, List[Any]]]:
         """ Resets the text-based environment.
 
         Resetting this environment means starting the next game in the pool.
 
         Returns:
-            A tuple (observation, info) where
+            A tuple (observations, infos) where
 
-            * observation: text observed in the initial state;
-            * infos: additional information as requested.
+            * observation: text observed in the initial state for each game in the batch;
+            * infos: additional information as requested for each game in the batch.
         """
-        self.current_gamefile = next(self._gamefiles_iterator)
+        if self.batch_env is not None:
+            self.batch_env.close()
 
-        if self.textworld_env is None:
-            env = textworld.start(self.current_gamefile, self.request_infos)
-            self.textworld_env = Filter(env)
-        else:
-            self.textworld_env.load(self.current_gamefile)
+        gamefiles = [next(self._gamefiles_iterator) for _ in range(self.batch_size)]
+        self.batch_env.load(gamefiles)
 
-        self.ob, infos = self.textworld_env.reset()
+        self.last_commands = [None] * self.batch_size
+        self.ob, infos = self.batch_env.reset()
         return self.ob, infos
 
     def skip(self, nb_games: int = 1) -> None:
@@ -121,36 +131,36 @@ class TextworldGamesEnv(gym.Env):
         for _ in range(nb_games):
             next(self._gamefiles_iterator)
 
-    def step(self, command) -> Tuple[str, Dict[str, Any]]:
-        """ Runs a command in the text-based environment.
+    def step(self, commands) -> Tuple[List[str], List[float], List[bool], Dict[str, List[Any]]]:
+        """ Runs a command in each text-based environment of the batch.
 
         Arguments:
-            command: Text command to send to the game interpreter.
+            commands: Text command to send to the game interpreter.
 
         Returns:
-            A tuple (observation, score, done, info) where
+            A tuple (observations, scores, dones, infos) where
 
-            * observation: text observed in the new state;
-            * score: total number of points accumulated so far;
-            * done: whether the game is finished or not;
-            * infos: additional information as requested.
+            * observations: text observed in the new state for each game in the batch;
+            * scores: total number of points accumulated so far for each game in the batch;
+            * dones: whether each game in the batch is finished or not;
+            * infos: additional information as requested for each game in the batch.
         """
-        self.last_command = command
-        self.ob, score, done, infos = self.textworld_env.step(self.last_command)
-        return self.ob, score, done, infos
+        self.last_commands = commands
+        self.obs, scores, dones, infos = self.batch_env.step(self.last_commands)
+        return self.obs, scores, dones, infos
 
     def close(self) -> None:
         """ Close this environment. """
 
-        if self.textworld_env is not None:
-            self.textworld_env.close()
+        if self.batch_env is not None:
+            self.batch_env.close()
 
-        self.textworld_env = None
+        self.batch_env = None
 
     def render(self, mode: str = 'human') -> Optional[Union[StringIO, str]]:
-        """ Renders the current state of this environment.
+        """ Renders the current state of each environment in the batch.
 
-        The rendering is composed of the previous text command (if there's one) and
+        Each rendering is composed of the previous text command (if there's one) and
         the text describing the current observation.
 
         Arguments:
@@ -171,21 +181,25 @@ class TextworldGamesEnv(gym.Env):
         """
         outfile = StringIO() if mode in ['ansi', "text"] else sys.stdout
 
-        msg = self.ob.rstrip() + "\n"
-        if self.last_command is not None:
-            command = "> " + self.last_command
-            if mode in ["ansi", "human"]:
-                command = colorize(command, "yellow", highlight=False)
+        renderings = []
+        for last_command, ob in zip(self.last_commands, self.obs):
+            msg = ob.rstrip() + "\n"
+            if last_command is not None:
+                command = "> " + last_command
+                if mode in ["ansi", "human"]:
+                    command = colorize(command, "yellow", highlight=False)
 
-            msg = command + "\n" + msg
+                msg = command + "\n" + msg
 
-        if mode == "human":
-            # Wrap each paragraph at 80 characters.
-            paragraphs = msg.split("\n")
-            paragraphs = ["\n".join(textwrap.wrap(paragraph, width=80)) for paragraph in paragraphs]
-            msg = "\n".join(paragraphs)
+            if mode == "human":
+                # Wrap each paragraph at 80 characters.
+                paragraphs = msg.split("\n")
+                paragraphs = ["\n".join(textwrap.wrap(paragraph, width=80)) for paragraph in paragraphs]
+                msg = "\n".join(paragraphs)
 
-        outfile.write(msg + "\n")
+            renderings.append(msg)
+
+        outfile.write("\n-----\n".join(renderings) + "\n")
 
         if mode == "text":
             outfile.seek(0)
