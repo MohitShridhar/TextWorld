@@ -101,6 +101,18 @@ class JerichoEnv(textworld.Environment):
             self._jericho.close()
             self._jericho = None
 
+    def copy(self) -> "JerichoEnv":
+        """ Return a copy of this environment. """
+        env = JerichoEnv()
+        env.load(self.gamefile)
+        env._jericho = self._jericho.copy()
+        # env.reset()
+
+        # Copy the Frotz's RAM over.
+        # env._jericho.load_str(self._jericho.save_str())
+        return env
+
+
 
 # By default disable the warning about unsupported games.
 warnings.simplefilter("ignore", JerichoUnsupportedGameWarning)

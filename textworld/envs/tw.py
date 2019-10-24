@@ -76,6 +76,7 @@ class TextWorldEnv(textworld.Environment):
         if self.infos.facts:
             self.state["facts"] = list(map(self._inform7.get_human_readable_fact, self.state["_facts"]))
 
+        self.state["last_action"] = None
         self.state["_last_action"] = self._last_action
         if self.infos.last_action and self._last_action is not None:
             self.state["last_action"] = self._inform7.get_human_readable_action(self._last_action)
@@ -131,6 +132,25 @@ class TextWorldEnv(textworld.Environment):
         self.state["score"] = self._game_progression
         self.state["done"] = self.state["won"] or self.state["lost"]
         return self.state, self.state["score"], self.state["done"]
+
+    def copy(self) -> "TextWorldEnv":
+        """ Return a soft copy. """
+        env = TextWorldEnv()
+
+        env.state = self.state
+        env.infos = self.infos
+
+        env._gamefile = self._gamefile
+        env._game = self._game
+        env._inform7 = self._inform7
+
+        env.prev_state = self.prev_state
+        env._last_action = self._last_action
+        env._previous_winning_policy = self._previous_winning_policy
+        env._current_winning_policy = self._current_winning_policy
+        env._moves = self._moves
+        env._game_progression = self._game_progression.copy()
+        return env
 
     def render(self, mode: str = "human") -> None:
         outfile = StringIO() if mode in ['ansi', "text"] else sys.stdout

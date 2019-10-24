@@ -155,6 +155,15 @@ class Inform7Data(textworld.core.Wrapper):
         self._gather_infos()
         return self.state
 
+    def copy(self) -> "Inform7Data":
+        """ Return a soft copy. """
+        env = Inform7Data()
+        env._wrapped_env = self._wrapped_env.copy()
+        env.state = self.state
+        env.infos = self.infos
+        env.prev_state = self.prev_state
+        return env
+
 
 class StateTracking(textworld.core.Wrapper):
     """
@@ -272,6 +281,25 @@ class StateTracking(textworld.core.Wrapper):
         self.state["done"] = self.state["won"] or self.state["lost"]
         return self.state, score, self.state["done"]
 
+    def copy(self) -> "StateTracking":
+        """ Return a soft copy. """
+        env = StateTracking()
+        env._wrapped_env = self._wrapped_env.copy()
+
+        env.state = self.state
+        env.infos = self.infos
+
+        env._gamefile = self._gamefile
+        env._game = self._game
+        env._inform7 = self._inform7
+
+        env._last_action = self._last_action
+        env._previous_winning_policy = self._previous_winning_policy
+        env._current_winning_policy = self._current_winning_policy
+        env._moves = self._moves
+        env._game_progression = self._game_progression.copy()
+        return env
+
 
 class GameData(textworld.core.Wrapper):
     """
@@ -309,3 +337,16 @@ class GameData(textworld.core.Wrapper):
         self.state, score, done = self._wrapped_env.step(command)
         self._gather_infos()
         return self.state, score, done
+
+    def copy(self) -> "GameData":
+        """ Return a soft copy. """
+        env = GameData()
+        env._wrapped_env = self._wrapped_env.copy()
+
+        env.state = self.state
+        env.infos = self.infos
+
+        env._gamefile = self._gamefile
+        env._game = self._game
+
+        return env
