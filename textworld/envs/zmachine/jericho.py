@@ -101,6 +101,14 @@ class JerichoEnv(textworld.Environment):
             self._jericho.close()
             self._jericho = None
 
+    def copy(self) -> "JerichoEnv":
+        """ Return a copy of this environment. """
+        env = JerichoEnv()
+        env.load(self.gamefile)
+        env._jericho = self._jericho.copy()
+        return env
+
+
 
 # By default disable the warning about unsupported games.
 warnings.simplefilter("ignore", JerichoUnsupportedGameWarning)
