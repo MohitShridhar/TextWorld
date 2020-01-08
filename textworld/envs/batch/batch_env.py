@@ -40,6 +40,7 @@ def _child(env_fn, parent_pipe, pipe):
                 result = hasattr(obj, attrs[-1])
 
             pipe.send(result)
+
     finally:
         pipe.close()
 
@@ -79,17 +80,16 @@ class _ChildEnv:
         self.hasattr(*args)
         return self.result()
 
-    def terminate(self):
-        self.call_sync("close")
+    def __del__(self):
         self._pipe.close()
         self._process.terminate()
         self._process.join()
 
 
 class AsyncBatchEnv(Environment):
-    """ Environment to run multiple games in parallel.
-    """
-    def __init__(self, env_fns):
+    """ Environment to run multiple games in parallel asynchronously. """
+
+    def __init__(self, env_fns: List[callable], auto_reset: bool = False):
         """
         Parameters
         ----------
@@ -97,6 +97,7 @@ class AsyncBatchEnv(Environment):
             Functions that create the environments.
         """
         self.env_fns = env_fns
+        self.auto_reset = auto_reset
         self.batch_size = len(self.env_fns)
 
         self.envs = []
@@ -151,8 +152,15 @@ class AsyncBatchEnv(Environment):
         results = []
 
         for i, (env, action) in enumerate(zip(self.envs, actions)):
-            if self.last[i] is not None and self.last[i][2]:  # Game is done
-                results.append(self.last[i])  # Copy last infos over.
+            if self.last[i] is not None and self.last[i][2]:  # Game has ended on the last step.
+                obs, reward, done, infos = self.last[i]  # # Copy last state over.
+
+                if self.auto_reset:
+                    reward, done = 0., False
+                    obs, infos = env.call_sync("reset")
+
+                results.append((obs, reward, done, infos))
+
             else:
                 env.call("step", action)
                 results.append(None)
@@ -178,14 +186,13 @@ class AsyncBatchEnv(Environment):
             env.result()
 
     def __del__(self):
-        for env in self.envs:
-            env.terminate()
+        pass  # Override `Environment.__del__` behavior.
 
 
 class SyncBatchEnv(Environment):
-    """ Environment to run multiple games independently.
-    """
-    def __init__(self, env_fns):
+    """ Environment to run multiple games independently synchronously. """
+
+    def __init__(self, env_fns: List[callable], auto_reset: bool = False):
         """
         Parameters
         ----------
@@ -194,6 +201,7 @@ class SyncBatchEnv(Environment):
         """
         self.env_fns = env_fns
         self.batch_size = len(self.env_fns)
+        self.auto_reset = auto_reset
         self.envs = [env_fn() for env_fn in self.env_fns]
 
     def load(self, game_files: List[str]) -> None:
@@ -236,8 +244,14 @@ class SyncBatchEnv(Environment):
         """
         results = []
         for i, (env, action) in enumerate(zip(self.envs, actions)):
-            if self.last[i] is not None and self.last[i][2]:  # Game is done
-                results.append(self.last[i])  # Copy last infos over.
+            if self.last[i] is not None and self.last[i][2]:  # Game has ended on the last step.
+                obs, reward, done, infos = self.last[i]
+
+                if self.auto_reset:
+                    reward, done = 0., False
+                    obs, infos = env.reset()
+
+                results.append((obs, reward, done, infos))
             else:
                 results.append(env.step(action))
 
@@ -253,6 +267,3 @@ class SyncBatchEnv(Environment):
     def close(self):
         for env in self.envs:
             env.close()
-
-    def __del__(self):
-        self.close()

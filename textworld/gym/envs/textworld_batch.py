@@ -29,6 +29,7 @@ class TextworldBatchGymEnv(gym.Env):
                  request_infos: Optional[EnvInfos] = None,
                  batch_size: int = 1,
                  asynchronous: bool = True,
+                 auto_reset: bool = False,
                  action_space: Optional[gym.Space] = None,
                  observation_space: Optional[gym.Space] = None) -> None:
         """ Environment for playing text-based games in batch.
@@ -45,10 +46,12 @@ class TextworldBatchGymEnv(gym.Env):
                 .. warning:: This is only supported for `*.ulx` games generated with TextWorld.
             batch_size:
                 Number of games in a batch. Default 1.
-            asynchronous: bool
+            asynchronous:
                 If `True`, wraps the environments in an `AsyncBatchEnv` (which uses
                 `multiprocessing` to run the environments in parallel). If `False`,
                 wraps the environments in a `SyncBatchEnv`. Default: `True`.
+            auto_reset:
+                TODO
             action_space:
                 The action space of this TextWorld environment. By default, a
                 :py:class:`textworld.gym.spaces.Word <textworld.gym.spaces.text_spaces.Word>`
@@ -71,11 +74,12 @@ class TextworldBatchGymEnv(gym.Env):
             return env
 
         env_fns = [_make_env for _ in range(self.batch_size)]
-        self.batch_env = AsyncBatchEnv(env_fns) if self.batch_size > 1 and asynchronous else SyncBatchEnv(env_fns)
+        self.batch_env = AsyncBatchEnv(env_fns, auto_reset) if self.batch_size > 1 and asynchronous else SyncBatchEnv(env_fns, auto_reset)
 
-        if action_space is None or observation_space is None:
-            # Extract vocabulary from all games.
-            vocab = sorted(textworld.text_utils.extract_vocab_from_gamefiles(self.gamefiles))
+        vocab = []
+        # if action_space is None or observation_space is None:
+        #     # Extract vocabulary from all games.
+        #     vocab = sorted(textworld.text_utils.extract_vocab_from_gamefiles(self.gamefiles))
 
         self.action_space = action_space or text_spaces.Word(max_length=8, vocab=vocab)
         self.observation_space = observation_space or text_spaces.Word(max_length=200, vocab=vocab)
