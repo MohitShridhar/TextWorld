@@ -66,21 +66,21 @@ def register_games(gamefiles: List[str],
         register(
             id=env_id,
             entry_point='textworld.gym.envs:TextworldGymEnv',
-            max_episode_steps=max_episode_steps,
             kwargs={
                 'gamefiles': gamefiles,
                 'request_infos': request_infos,
+                'max_episode_steps': max_episode_steps,
                 **kwargs}
         )
     else:
         register(
             id=env_id,
             entry_point='textworld.gym.envs:TextworldBatchGymEnv',
-            max_episode_steps=max_episode_steps,
             kwargs={
                 'gamefiles': gamefiles,
                 'batch_size': batch_size,
                 'request_infos': request_infos,
+                'max_episode_steps': max_episode_steps,
                 **kwargs}
         )
     return env_id

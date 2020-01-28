@@ -17,7 +17,9 @@ class TextworldGymEnv(TextworldBatchGymEnv):
                  gamefiles: List[str],
                  request_infos: Optional[EnvInfos] = None,
                  action_space: Optional[gym.Space] = None,
-                 observation_space: Optional[gym.Space] = None) -> None:
+                 max_episode_steps: Optional[int] = None,
+                 observation_space: Optional[gym.Space] = None,
+                 **kwargs) -> None:
         """ Environment for playing text-based games.
 
         Arguments:
@@ -45,7 +47,9 @@ class TextworldGymEnv(TextworldBatchGymEnv):
                          request_infos=request_infos,
                          batch_size=1,
                          action_space=action_space,
-                         observation_space=observation_space)
+                         observation_space=observation_space,
+                         max_episode_steps=max_episode_steps,
+                         **kwargs)
 
     def reset(self) -> Tuple[str, Dict[str, Any]]:
         """ Resets the text-based environment.

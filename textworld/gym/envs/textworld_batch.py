@@ -14,7 +14,7 @@ from gym.utils import colorize
 import textworld
 import textworld.text_utils
 from textworld import EnvInfos
-from textworld.envs.wrappers import Filter, GenericEnvironment
+from textworld.envs.wrappers import Filter, GenericEnvironment, Limit
 from textworld.envs.batch import AsyncBatchEnv, SyncBatchEnv
 
 from textworld.gym.spaces import text_spaces
@@ -30,6 +30,7 @@ class TextworldBatchGymEnv(gym.Env):
                  batch_size: int = 1,
                  asynchronous: bool = True,
                  auto_reset: bool = False,
+                 max_episode_steps: Optional[int] = None,
                  action_space: Optional[gym.Space] = None,
                  observation_space: Optional[gym.Space] = None) -> None:
         """ Environment for playing text-based games in batch.
@@ -52,6 +53,8 @@ class TextworldBatchGymEnv(gym.Env):
                 wraps the environments in a `SyncBatchEnv`. Default: `True`.
             auto_reset:
                 TODO
+            max_episode_steps:
+                TODO
             action_space:
                 The action space of this TextWorld environment. By default, a
                 :py:class:`textworld.gym.spaces.Word <textworld.gym.spaces.text_spaces.Word>`
@@ -70,6 +73,9 @@ class TextworldBatchGymEnv(gym.Env):
 
         def _make_env():
             env = GenericEnvironment(self.request_infos)
+            if max_episode_steps:
+                env = Limit(env, max_episode_steps=max_episode_steps)
+
             env = Filter(env)
             return env
 

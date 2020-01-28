@@ -212,7 +212,5 @@ def test_auto_reset():
         for _ in range(max_episode_steps):
             obs, scores, dones, infos = env.step(["wait"] * batch_size)
 
-        assert type(dones) is bool  # Gym's timeout overwrites `done` value.
-        assert dones
-
+        assert sum(dones) == 4  # All env have played maximum number of steps.
         env.close()
