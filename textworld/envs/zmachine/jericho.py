@@ -44,6 +44,7 @@ class JerichoEnv(textworld.Environment):
         return self._jericho is not None
 
     def seed(self, seed=None):
+        self.close()
         self._seed = seed
         return self._seed
 
@@ -66,10 +67,9 @@ class JerichoEnv(textworld.Environment):
         self.state["location"] = self._jericho.get_player_location()
 
     def reset(self):
-        self.close()  # In case, it is running.
-
-        # Start the game using Jericho.
-        self._jericho = jericho.FrotzEnv(self.gamefile, self._seed)
+        if self._jericho is None:
+            # Start the game using Jericho.
+            self._jericho = jericho.FrotzEnv(self.gamefile, self._seed)
 
         self.state = GameState()
         self.state.raw, _ = self._jericho.reset()
