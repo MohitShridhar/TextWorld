@@ -15,9 +15,9 @@ from pkg_resources import Requirement, resource_filename
 
 from textworld.utils import make_temp_directory, str2bool, chunk
 
-from textworld.generator.game import EventCondition, EventAction, Event, EventAnd, EventOr, Game
+from textworld.generator.game import EventCondition, EventAction, EventAnd, EventOr, Game
 from textworld.generator.world import WorldRoom, WorldEntity
-from textworld.logic import Signature, Proposition, Action, Variable
+from textworld.logic import Signature, Proposition, Action, Variable, Rule
 
 
 I7_DEFAULT_PATH = resource_filename(Requirement.parse('textworld'), 'textworld/thirdparty/inform7-6M62')
@@ -99,12 +99,7 @@ class Inform7Game:
     def gen_source_for_attributes(self, attributes: Iterable[Proposition]) -> str:
         source = ""
         for attr in attributes:
-            if attr.name.count('__') == 0:
-                attr_ = Proposition(name='is__' + attr.name, arguments=attr.arguments, verb='is', definition=attr.name)
-            else:
-                attr_ = attr
-
-            source_attr = self.gen_source_for_attribute(attr_)
+            source_attr = self.gen_source_for_attribute(attr)
             if source_attr:
                 source += source_attr + ".\n"
 
@@ -126,14 +121,15 @@ class Inform7Game:
 
         return " and ".join(i7_conds)
 
-    def gen_source_for_rule(self, rule: Action) -> Optional[str]:
-        pt = self.kb.inform7_events[rule.name]
-        if pt is None:
+    def gen_source_for_rule(self, rule: Rule) -> Optional[str]:
+        i7event = self.kb.inform7_events.get(rule.name)
+        if i7event is None:
             msg = "Undefined Inform7's command: {}".format(rule.name)
             warnings.warn(msg, TextworldInform7Warning)
             return None
 
-        return pt.format(**self._get_entities_mapping(rule))
+        mapping = {ph.type: ph.name for ph in rule.placeholders}
+        return i7event.format(**mapping)
 
     def gen_source_for_actions(self, acts: Iterable[Action]) -> str:
         """Generate Inform 7 source for winning/losing actions."""
@@ -217,9 +213,6 @@ class Inform7Game:
 
     def _get_name_mapping(self, action):
         mapping = self.kb.rules[action.name].match(action)
-        for ph, var in mapping.items():
-            a = ph.name
-            b = self.entity_infos[var.name].name
         return {ph.name: self.entity_infos[var.name].name for ph, var in mapping.items()}
 
     def _get_entities_mapping(self, action):
@@ -270,8 +263,6 @@ class Inform7Game:
         """
         # Prioritze actions with many precondition terms.
         actions = sorted(actions, key=lambda a: len(a.preconditions), reverse=True)
-        from pprint import pprint
-        pprint(actions)
         for action in actions:
             event = self.kb.inform7_events[action.name]
             if event.format(**self._get_name_mapping(action)) == i7_event:
@@ -345,7 +336,7 @@ class Inform7Game:
 
         objective = self.game.objective.replace("\n", "[line break]")
         maximum_score = 0
-        wining = 0
+        wining = 0  # FIX typo
         quests_text, viewed_actions = [], {}
         action_id = []
         for quest_id, quest in enumerate(self.game.quests):
@@ -357,11 +348,9 @@ class Inform7Game:
             """)
             quest_ending = quest_completed.format(quest_id=quest_id)
 
-            for event_id, event in enumerate(quest.win_events_list):
-                commands = self.gen_commands_from_actions(event.actions)
-                event.commands = commands
-
-                walkthrough = '\nTest quest{}_{} with "{}"\n\n'.format(quest_id, event_id, " / ".join(commands))
+            if quest.win_event:
+                commands = quest.win_event.commands or self.gen_commands_from_actions(quest.win_event.actions)
+                walkthrough = '\nTest quest{} with "{}"\n\n'.format(quest_id, " / ".join(commands))
                 quest_ending += walkthrough
 
             # Add winning and losing conditions for quest.
@@ -385,8 +374,8 @@ class Inform7Game:
 
             conditions, removals = '', ''
             cond_id = []
-            for fail_event in quest.fail_events:
-                condition, removed_conditions, final_condition, _, _ = self.get_events(fail_event,
+            if quest.fail_event:
+                condition, removed_conditions, final_condition, _, _ = self.get_events(quest.fail_event,
                                                                                        textwrap.dedent(""""""),
                                                                                        textwrap.dedent(""""""),
                                                                                        action_id=action_id,
@@ -399,8 +388,8 @@ class Inform7Game:
 
                 wining += 1
 
-            for win_event in quest.win_events:
-                condition, removed_conditions, final_condition, _, _ = self.get_events(win_event,
+            if quest.win_event:
+                condition, removed_conditions, final_condition, _, _ = self.get_events(quest.win_event,
                                                                                        textwrap.dedent(""""""),
                                                                                        textwrap.dedent(""""""),
                                                                                        action_id=action_id,
@@ -456,7 +445,6 @@ class Inform7Game:
                 Now the last notified score is the score;
             if {game_winning_test}:
                 end the story finally; [Win]
-
 
         The simpler notify score changes rule substitutes for the notify score changes rule.
 
@@ -1062,26 +1050,19 @@ class Inform7Game:
                 return [None] * 5
 
             elif isinstance(combined_events, EventAction):
-                i7_ = self.gen_source_for_actions(combined_events.actions)
+                i7_ = self.gen_source_for_actions([combined_events.action])
                 if not rwd_conds or i7_ not in rwd_conds.values():
                     txt += [action_processing_template.format(action_id=len(action_id), actions=i7_)]
                     rmv += [remove_action_processing_template.format(action_id=len(action_id))]
-                    temp = [self.gen_source_for_conditions([prop]) for prop in combined_events.actions[0].preconditions
-                            if prop.verb != 'is']
-                    if temp:
-                        temp = ' and ' + ' and '.join(t for t in temp)
-                    else:
-                        temp = ''
+                    temp = ''
                     check_vars += ['action{action_id} check is true'.format(action_id=len(action_id)) + temp]
                     rwd_conds['action{action_id}'.format(action_id=len(action_id))] = i7_
                     action_id += [1]
                 else:
                     word = list(rwd_conds.keys())[list(rwd_conds.values()).index(i7_)]
                     rmv += [remove_action_processing_template.format(action_id=word[6:])]
-                    temp = [self.gen_source_for_conditions([prop]) for prop in combined_events.actions[0].preconditions
-                            if prop.verb != 'is']
-                    check_vars += ['action{action_id} check is true'.format(action_id=word[6:]) + ' and ' +
-                                   ' and '.join(t for t in temp)]
+                    temp = ''
+                    check_vars += ['action{action_id} check is true'.format(action_id=word[6:]) + temp]
 
                 return [None] * 5
 
@@ -1094,8 +1075,8 @@ class Inform7Game:
             if st:
                 _txt += [st]
                 _rmv += [rm]
-                _check_vars.append('condition{cond_id} of quest{quest_id} check is true'.format(cond_id=len(cond_id)-1,
-                                                                                                quest_id=quest_id))
+                template = 'condition{cond_id} of quest{quest_id} check is true'
+                _check_vars.append(template.format(cond_id=len(cond_id) - 1, quest_id=quest_id))
                 if cond_type:
                     _cond_id += cond_type
 
