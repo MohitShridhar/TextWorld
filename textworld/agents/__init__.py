@@ -6,3 +6,4 @@ from textworld.agents.random import RandomCommandAgent
 from textworld.agents.simple import NaiveAgent
 from textworld.agents.human import HumanAgent
 from textworld.agents.walkthrough import WalkthroughAgent, WalkthroughDone
+from textworld.agents.handcoded import HandCodedAgent, HandCodedAgentTimeout, HandCodedAgentFailed

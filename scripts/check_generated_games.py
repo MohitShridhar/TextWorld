@@ -19,13 +19,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    agent = textworld.agents.WalkthroughAgent()
+    agent = textworld.agents.HandCodedAgent()
 
     for i, game in enumerate(args.games, start=1):
         print("{}. Testing {} ...".format(i, game))
         env = textworld.start(game)
         env.infos.admissible_commands = True
-        agent.reset(env)
+        agent.reset(env, game)
         game_state = env.reset()
 
         if args.verbose:
@@ -35,7 +35,8 @@ def main():
         done = False
         while not done:
             command = agent.act(game_state, reward, done)
-            assert command in game_state.admissible_commands
+            print(command)
+            # assert command in game_state.admissible_commands
             game_state, reward, done = env.step(command)
 
             if args.verbose:
