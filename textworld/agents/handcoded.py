@@ -48,6 +48,8 @@ class BasePolicy(object):
         self.receptacles_to_check = []
         self.inventory = []
         self.action_backlog = []
+        self.object_blacklist = []
+        self.receptacle_whitelist = []
         self.steps = 0
 
     def get_hashed_objects_in_str(self, obs, special_char='_'):
@@ -92,7 +94,8 @@ class BasePolicy(object):
             self.receptacles = self.get_objects_and_classes(obs)
         else:
             # get the objects which are visible in the current frame
-            self.visible_objects = self.get_objects_and_classes(obs)
+            if "you see" in obs:
+                self.visible_objects = self.get_objects_and_classes(obs)
 
             # keep track of where all the objects are
             for o_name, o_cls in self.visible_objects.items():
@@ -120,6 +123,10 @@ class BasePolicy(object):
                     # still no idea where to look, then look at all receptacles
                     if len(self.receptacles_to_check) == 0:
                         self.receptacles_to_check = list(self.receptacles.keys())
+
+                # remove the current receptacle from things to check
+                if self.curr_recep in self.receptacles_to_check:
+                    self.receptacles_to_check.remove(self.curr_recep)
 
                 # open the current receptacle if you can
                 if self.is_receptacle_openable(self.curr_recep) and not self.checked_inside_curr_recep:
@@ -230,6 +237,21 @@ class PickAndPlaceSimplePolicy(BasePolicy):
             {'action': 'put',  'param': self.task_params['parent_target']}
         ]
 
+
+class PickTwoObjAndPlacePolicy(BasePolicy):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subgoals = [
+            {'action': 'find', 'param': self.task_params['object_target']},
+            {'action': 'take', 'param': self.task_params['object_target']},
+            {'action': 'find', 'param': self.task_params['parent_target']},
+            {'action': 'put',  'param': self.task_params['parent_target']},
+            {'action': 'find', 'param': self.task_params['object_target']},
+            {'action': 'take', 'param': self.task_params['object_target']},
+            {'action': 'find', 'param': self.task_params['parent_target']},
+            {'action': 'put',  'param': self.task_params['parent_target']}
+        ]
 
 class LookAtObjInLightPolicy(BasePolicy):
 
