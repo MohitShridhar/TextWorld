@@ -21,6 +21,7 @@ class BasePolicy(object):
 
     # Object and affordance priors
     OBJECTS = constants.OBJECTS_SINGULAR
+    RECEPTACLES = [r.lower() for r in constants.RECEPTACLES]
     OPENABLE_OBJECTS = [o.lower() for o in constants.OPENABLE_CLASS_LIST]
     VAL_RECEPTACLE_OBJECTS = dict((r.lower(), [o.lower() for o in objs]) for r, objs in constants.VAL_RECEPTACLE_OBJECTS.items())
     OBJECT_TO_VAL_RECEPTACLE = dict((o, list()) for o in OBJECTS)
@@ -69,6 +70,9 @@ class BasePolicy(object):
         obj_found_in_receps = self.OBJECT_TO_VAL_RECEPTACLE[obj_cls]
         return [r_name for r_name, r_cls in self.receptacles.items() if r_cls in obj_found_in_receps]
 
+    def get_list_of_receptacles_of_type(self, recep_cls):
+        return [r_name for r_name, r_cls in self.receptacles.items() if r_cls == recep_cls]
+
     def is_receptacle_openable(self, recep):
         return recep and self.receptacles[recep] in self.OPENABLE_OBJECTS
 
@@ -80,6 +84,8 @@ class BasePolicy(object):
             raise HandCodedAgentTimeout()
         # Finished all subgoals but still didn't achieve the goal
         elif self.subgoal_idx >= len(self.subgoals):
+            while len(self.action_backlog) > 0:
+                return self.action_backlog.pop()
             raise HandCodedAgentFailed()
 
         if "Welcome" in obs:  # intro text with receptacles
@@ -98,6 +104,7 @@ class BasePolicy(object):
             # done criteria
             if len(objs_of_interest) > 0:
                 self.receptacles_to_check = []
+                self.action_backlog = []
                 self.subgoal_idx += 1
             else:
                 # saw the obj class somewhere before
@@ -105,7 +112,10 @@ class BasePolicy(object):
                     self.receptacles_to_check = [self.obj_cls_to_receptacle_map[sub_param]]
                 # use heuristic to determine which receptacle to check
                 elif len(self.receptacles_to_check) == 0:
-                    self.receptacles_to_check = self.get_list_of_receptacles_to_search_for_object_cls(sub_param)
+                    if sub_param in self.RECEPTACLES:
+                        self.receptacles_to_check = self.get_list_of_receptacles_of_type(sub_param)
+                    else:
+                        self.receptacles_to_check = self.get_list_of_receptacles_to_search_for_object_cls(sub_param)
 
                     # still no idea where to look, then look at all receptacles
                     if len(self.receptacles_to_check) == 0:
@@ -127,20 +137,71 @@ class BasePolicy(object):
                     else:
                         return self.action_backlog.pop()
 
+        # GOTO
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'goto':
+            target_receps = self.get_list_of_receptacles_of_type(sub_param)
+            self.curr_recep = target_receps[0]
+            self.subgoal_idx += 1
+            return "go to {}".format(target_receps[0])
+
         # TAKE
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
         if sub_action == 'take':
-            obj = random.choice(objs_of_interest)
-            self.inventory.append(obj)
-            self.subgoal_idx += 1
-            return "take {} from {}".format(obj, self.curr_recep)
+            if self.is_receptacle_openable(self.curr_recep) and not self.checked_inside_curr_recep:
+                self.action_backlog.append("close {}".format(self.curr_recep))
+                self.checked_inside_curr_recep = True
+                return "open {}".format(self.curr_recep)
+            else:
+                obj = random.choice(objs_of_interest)
+                self.inventory.append(obj)
+                self.subgoal_idx += 1
+                return "take {} from {}".format(obj, self.curr_recep)
 
         # PUT
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
         if sub_action == 'put':
-            obj = self.inventory.pop()
+            if self.is_receptacle_openable(self.curr_recep) and not self.checked_inside_curr_recep:
+                self.action_backlog.append("close {}".format(self.curr_recep))
+                self.checked_inside_curr_recep = True
+                return "open {}".format(self.curr_recep)
+            else:
+                obj = self.inventory.pop()
+                self.subgoal_idx += 1
+                return "put {} in/on {}".format(obj, self.curr_recep)
+
+        # OPEN
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'open':
             self.subgoal_idx += 1
-            return "put {} in/on {}".format(obj, self.curr_recep)
+            return "open {}".format(self.curr_recep)
+
+        # CLOSE
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'close':
+            self.subgoal_idx += 1
+            return "close {}".format(self.curr_recep)
+
+        # HEAT
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'heat':
+            inv_obj = self.inventory[0]
+            self.subgoal_idx += 1
+            return "heat {} with {}".format(inv_obj, self.curr_recep)
+
+        # COOL
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'cool':
+            inv_obj = self.inventory[0]
+            self.subgoal_idx += 1
+            return "cool {} with {}".format(inv_obj, self.curr_recep)
+
+        # CLEAN
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'clean':
+            inv_obj = self.inventory[0]
+            self.subgoal_idx += 1
+            return "clean {} with {}".format(inv_obj, self.curr_recep)
 
         # USE
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
@@ -152,8 +213,8 @@ class BasePolicy(object):
 
 class PickAndPlaceSimplePolicy(BasePolicy):
 
-    def __init__(self, task_params, max_steps=100):
-        super().__init__(task_params, max_steps=max_steps)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.subgoals = [
             {'action': 'find', 'param': self.task_params['object_target']},
             {'action': 'take', 'param': self.task_params['object_target']},
@@ -164,13 +225,55 @@ class PickAndPlaceSimplePolicy(BasePolicy):
 
 class LookAtObjInLightPolicy(BasePolicy):
 
-    def __init__(self, task_params, max_steps=100):
-        super().__init__(task_params, max_steps=max_steps)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.subgoals = [
             {'action': 'find', 'param': self.task_params['object_target']},
             {'action': 'take', 'param': self.task_params['object_target']},
             {'action': 'find', 'param': self.task_params['toggle_target']},
             {'action': 'use',  'param': self.task_params['toggle_target']}
+        ]
+
+
+class PickHeatThenPlaceInRecepPolicy(BasePolicy):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subgoals = [
+            {'action': 'find', 'param': self.task_params['object_target']},
+            {'action': 'take', 'param': self.task_params['object_target']},
+            {'action': 'goto', 'param': 'microwave'},
+            {'action': 'heat', 'param': self.task_params['object_target']},
+            {'action': 'find', 'param': self.task_params['parent_target']},
+            {'action': 'put',  'param': self.task_params['parent_target']}
+        ]
+
+
+class PickCoolThenPlaceInRecepPolicy(BasePolicy):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subgoals = [
+            {'action': 'find', 'param': self.task_params['object_target']},
+            {'action': 'take', 'param': self.task_params['object_target']},
+            {'action': 'goto', 'param': 'fridge'},
+            {'action': 'cool', 'param': self.task_params['object_target']},
+            {'action': 'find', 'param': self.task_params['parent_target']},
+            {'action': 'put',  'param': self.task_params['parent_target']}
+        ]
+
+
+class PickCleanThenPlaceInRecepPolicy(BasePolicy):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subgoals = [
+            {'action': 'find', 'param': self.task_params['object_target']},
+            {'action': 'take', 'param': self.task_params['object_target']},
+            {'action': 'goto', 'param': 'sink'},
+            {'action': 'clean', 'param': self.task_params['object_target']},
+            {'action': 'find', 'param': self.task_params['parent_target']},
+            {'action': 'put',  'param': self.task_params['parent_target']}
         ]
 
 
