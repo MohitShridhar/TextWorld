@@ -203,6 +203,14 @@ class BasePolicy(object):
             self.subgoal_idx += 1
             return "clean {} with {}".format(inv_obj, self.curr_recep)
 
+        # SLICE
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'slice':
+            obj = random.choice(objs_of_interest)
+            knife_obj = self.inventory[0]
+            self.subgoal_idx += 1
+            return "slice {} with {}".format(obj, knife_obj)
+
         # USE
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
         if sub_action == 'use':
@@ -283,7 +291,8 @@ class HandCodedAgent(Agent):
     def __init__(self, max_steps=100):
         self.max_steps = max_steps
 
-    def get_task_policy(self, task_type):
+    def get_task_policy(self, task_param):
+        task_type = task_param['task_type']
         task_class_str = task_type.replace("_", " ").title().replace(" ", '') + "Policy"
         if task_class_str in globals():
             return globals()[task_class_str]
@@ -303,7 +312,7 @@ class HandCodedAgent(Agent):
         self.task_params = dict((k, v.lower() if v in constants.OBJECTS else v) for k, v in self.task_params.items())
 
         game_state = env.reset()
-        policy_class = self.get_task_policy(self.task_params['task_type'])
+        policy_class = self.get_task_policy(self.task_params)
         self.policy = policy_class(self.task_params, max_steps=self.max_steps)
 
     def act(self, game_state, reward, done):
