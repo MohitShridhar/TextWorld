@@ -78,6 +78,10 @@ class BasePolicy(object):
     def is_receptacle_openable(self, recep):
         return recep and self.receptacles[recep] in self.OPENABLE_OBJECTS
 
+    def is_already_at_receptacle(self, sub_param):
+        return (sub_param in self.obj_cls_to_receptacle_map and self.curr_recep == self.obj_cls_to_receptacle_map[sub_param]) or \
+               (self.curr_recep in self.receptacles and self.receptacles[self.curr_recep] == sub_param)
+
     def act(self, obs):
         self.steps += 1
 
@@ -97,15 +101,15 @@ class BasePolicy(object):
             if "you see" in obs:
                 self.visible_objects = self.get_objects_and_classes(obs)
 
-            # keep track of where all the objects are
-            for o_name, o_cls in self.visible_objects.items():
-                self.obj_cls_to_receptacle_map[o_cls] = self.curr_recep
+                # keep track of where all the objects are
+                for o_name, o_cls in self.visible_objects.items():
+                    self.obj_cls_to_receptacle_map[o_cls] = self.curr_recep
 
         # FIND
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
         if sub_action == 'find':
             # done criteria
-            if len(objs_of_interest) > 0:
+            if len(objs_of_interest) > 0 or self.is_already_at_receptacle(sub_param):
                 self.receptacles_to_check = []
                 self.action_backlog = []
                 self.subgoal_idx += 1
@@ -124,10 +128,6 @@ class BasePolicy(object):
                     if len(self.receptacles_to_check) == 0:
                         self.receptacles_to_check = list(self.receptacles.keys())
 
-                # remove the current receptacle from things to check
-                if self.curr_recep in self.receptacles_to_check:
-                    self.receptacles_to_check.remove(self.curr_recep)
-
                 # open the current receptacle if you can
                 if self.is_receptacle_openable(self.curr_recep) and not self.checked_inside_curr_recep:
                     self.checked_inside_curr_recep = True
@@ -143,6 +143,8 @@ class BasePolicy(object):
                         return "go to {}".format(receptacle_to_check)
                     else:
                         return self.action_backlog.pop()
+        # if find succeded, then no receptacles to check
+        self.receptacles_to_check = []
 
         # GOTO
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
