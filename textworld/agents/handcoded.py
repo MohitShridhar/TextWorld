@@ -2,9 +2,9 @@
 # Licensed under the MIT license.
 
 import os
+import re
 import sys
 import json
-import string
 import random
 from textworld import Agent
 
@@ -56,7 +56,8 @@ class BasePolicy(object):
         return [o.rstrip(".,") for o in obs.split() if special_char in o]
 
     def get_objects_and_classes(self, obs, special_char='_'):
-        hashed_objects = self.get_hashed_objects_in_str(obs, special_char=special_char)
+        obj_str = re.split("you see", obs, flags=re.IGNORECASE)[-1]
+        hashed_objects = self.get_hashed_objects_in_str(obj_str, special_char=special_char)
         return dict((o, o.split(special_char)[0]) for o in hashed_objects)
 
     def get_list_of_objects_of_class(self, obj_cls, obj_dict):
