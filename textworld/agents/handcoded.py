@@ -98,7 +98,7 @@ class BasePolicy(object):
             self.receptacles = self.get_objects_and_classes(obs)
         else:
             # get the objects which are visible in the current frame
-            if "you see" in obs:
+            if "you see" in obs and "you see nothing" not in obs:
                 self.visible_objects = self.get_objects_and_classes(obs)
 
                 # keep track of where all the objects are
