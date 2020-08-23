@@ -83,6 +83,9 @@ class BasePolicy(object):
         return (sub_param in self.obj_cls_to_receptacle_map and self.curr_recep == self.obj_cls_to_receptacle_map[sub_param]) or \
                (self.curr_recep in self.receptacles and self.receptacles[self.curr_recep] == sub_param)
 
+    def is_blacklisted_object_in_visible_objects(self, visible_objects):
+        return len(list(set().union(visible_objects, self.object_blacklist))) > 0
+
     def act(self, obs):
         self.steps += 1
 
@@ -101,6 +104,11 @@ class BasePolicy(object):
             # get the objects which are visible in the current frame
             if "you see" in obs and "you see nothing" not in obs:
                 self.visible_objects = self.get_objects_and_classes(obs)
+
+                # # ignore blacklisted object
+                # for obj in self.object_blacklist:
+                #     if obj in self.visible_objects:
+                #         del self.visible_objects[obj]
 
                 # keep track of where all the objects are
                 for o_name, o_cls in self.visible_objects.items():
@@ -166,6 +174,7 @@ class BasePolicy(object):
                 obj = random.choice(objs_of_interest)
                 self.inventory.append(obj)
                 self.subgoal_idx += 1
+                del self.obj_cls_to_receptacle_map[obj.split("_")[0]]
                 return "take {} from {}".format(obj, self.curr_recep)
 
         # PUT
@@ -178,6 +187,7 @@ class BasePolicy(object):
             else:
                 obj = self.inventory.pop()
                 self.subgoal_idx += 1
+                self.object_blacklist.append(obj)
                 return "put {} in/on {}".format(obj, self.curr_recep)
 
         # OPEN
