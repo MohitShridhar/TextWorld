@@ -86,6 +86,13 @@ class BasePolicy(object):
     def is_blacklisted_object_in_visible_objects(self, visible_objects):
         return len(list(set().union(visible_objects, self.object_blacklist))) > 0
 
+    def blacklist_obj(self, obj):
+        obj_cls = obj.split("_")[0]
+        if obj_cls in self.obj_cls_to_receptacle_map:
+            del self.obj_cls_to_receptacle_map[obj_cls]
+        if obj in self.visible_objects:
+            del self.visible_objects[obj]
+
     def act(self, obs):
         self.steps += 1
 
@@ -102,13 +109,15 @@ class BasePolicy(object):
             self.receptacles = self.get_objects_and_classes(obs)
         else:
             # get the objects which are visible in the current frame
-            if "you see" in obs and "you see nothing" not in obs:
+            if "you see nothing" in obs:
+                self.visible_objects = dict()
+            elif "you see" in obs:
                 self.visible_objects = self.get_objects_and_classes(obs)
 
-                # # ignore blacklisted object
-                # for obj in self.object_blacklist:
-                #     if obj in self.visible_objects:
-                #         del self.visible_objects[obj]
+                # ignore blacklisted object
+                for obj in self.object_blacklist:
+                    if obj in self.visible_objects:
+                        del self.visible_objects[obj]
 
                 # keep track of where all the objects are
                 for o_name, o_cls in self.visible_objects.items():
@@ -174,7 +183,7 @@ class BasePolicy(object):
                 obj = random.choice(objs_of_interest)
                 self.inventory.append(obj)
                 self.subgoal_idx += 1
-                del self.obj_cls_to_receptacle_map[obj.split("_")[0]]
+                self.blacklist_obj(obj)
                 return "take {} from {}".format(obj, self.curr_recep)
 
         # PUT
@@ -187,6 +196,7 @@ class BasePolicy(object):
             else:
                 obj = self.inventory.pop()
                 self.subgoal_idx += 1
+                self.blacklist_obj(obj)
                 self.object_blacklist.append(obj)
                 return "put {} in/on {}".format(obj, self.curr_recep)
 
