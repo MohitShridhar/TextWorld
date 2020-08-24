@@ -50,6 +50,7 @@ class BasePolicy(object):
         self.action_backlog = []
         self.object_blacklist = []
         self.receptacle_whitelist = []
+        self.admissible_commands = []
         self.steps = 0
 
     def get_hashed_objects_in_str(self, obs, special_char='_'):
@@ -93,18 +94,7 @@ class BasePolicy(object):
         if obj in self.visible_objects:
             del self.visible_objects[obj]
 
-    def act(self, obs):
-        self.steps += 1
-
-        # Timeout
-        if self.steps > self.max_steps:
-            raise HandCodedAgentTimeout()
-        # Finished all subgoals but still didn't achieve the goal
-        elif self.subgoal_idx >= len(self.subgoals):
-            while len(self.action_backlog) > 0:
-                return self.action_backlog.pop()
-            raise HandCodedAgentFailed()
-
+    def observe(self, obs):
         if "Welcome" in obs:  # intro text with receptacles
             self.receptacles = self.get_objects_and_classes(obs)
         else:
@@ -122,6 +112,22 @@ class BasePolicy(object):
                 # keep track of where all the objects are
                 for o_name, o_cls in self.visible_objects.items():
                     self.obj_cls_to_receptacle_map[o_cls] = self.curr_recep
+
+    def act(self, game_state):
+        obs = game_state['feedback']
+        self.admissible_commands = game_state['admissible_commands']
+        self.steps += 1
+
+        # Timeout
+        if self.steps > self.max_steps:
+            raise HandCodedAgentTimeout()
+        # Finished all subgoals but still didn't achieve the goal
+        elif self.subgoal_idx >= len(self.subgoals):
+            while len(self.action_backlog) > 0:
+                return self.action_backlog.pop()
+            raise HandCodedAgentFailed()
+
+        self.observe(obs)
 
         # FIND
         sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
@@ -248,6 +254,11 @@ class BasePolicy(object):
             self.subgoal_idx += 1
             return "use {}".format(obj)
 
+        # LOOK
+        sub_action, sub_param, objs_of_interest = self.get_next_subgoal()
+        if sub_action == 'look':
+            return "look"
+
 
 class PickAndPlaceSimplePolicy(BasePolicy):
 
@@ -361,7 +372,6 @@ class HandCodedAgent(Agent):
         self.policy = policy_class(self.task_params, max_steps=self.max_steps)
 
     def act(self, game_state, reward, done):
-        obs = game_state['feedback']
-        action = self.policy.act(obs)
+        action = self.policy.act(game_state)
 
         return action

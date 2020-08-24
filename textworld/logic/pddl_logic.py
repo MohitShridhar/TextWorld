@@ -189,8 +189,11 @@ class State(textworld.logic.State):
         self.pddl_problem = pddl_problem
 
         # Load domain + problem.
-        self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
-        _, self.sas_replan = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+        try:
+            self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
+            _, self.sas_replan = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+        except:
+            raise Exception("Couldn't load domain & problem")
 
         self._actions = {a.name: a for a in self.task.actions}
 
