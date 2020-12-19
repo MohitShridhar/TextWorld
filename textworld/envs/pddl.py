@@ -22,8 +22,7 @@ from textworld.logic.pddl_logic import GameLogic, State
 
 import os
 import sys
-sys.path.append(os.environ["ALFRED_ROOT"])
-from agents.expert import HandCodedTWAgent, HandCodedAgentTimeout
+from alfworld.agents.expert import HandCodedTWAgent, HandCodedAgentTimeout
 
 import fast_downward
 
